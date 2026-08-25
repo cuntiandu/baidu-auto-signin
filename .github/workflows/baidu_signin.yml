@@ -11,15 +11,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
       - name: Install dependencies
         run: pip install requests
+
+      - name: Check secret configured
+        env:
+          BAIDU_COOKIE: ${{ secrets.BAIDU_COOKIE }}
+        run: |
+          if [ -z "$BAIDU_COOKIE" ]; then
+            echo "错误: 未配置 BAIDU_COOKIE Secret"
+            echo "请前往 Settings -> Secrets and variables -> Actions 添加 BAIDU_COOKIE"
+            exit 1
+          fi
+          echo "BAIDU_COOKIE 已配置，长度: ${#BAIDU_COOKIE}"
 
       - name: Run Baidu Sign-in
         env:
