@@ -1,35 +1,11 @@
+"""百度网盘每日签到（GitHub Actions 定时任务用）。"""
+
 import os
 import re
 import sys
 import time
-import json
+
 import requests
-
-
-# ============================================================================
-# 2026-09-16 修复说明
-#
-# 上一版报错（GitHub Actions 日志）：
-#   urllib3.exceptions.DecodeError: ('Received response with content-encoding: gzip,
-#       but failed to decode it.', error('Error -3 while decompressing data:
-#       incorrect header check'))
-#   requests.exceptions.ContentDecodingError: ...
-#   崩在 get_userinfo() 那一行，整个脚本直接退出（exit code 1）
-#
-# 原因：脚本自己把请求头写死成 "Accept-Encoding: gzip, deflate"，
-#       而百度这个接口返回了 "Content-Encoding: gzip"，响应体却并不是 gzip。
-#       响应头和响应体对不上 → urllib3 解压时抛 DecodeError。
-#
-# 本次改动（3 处）：
-#   1. Accept-Encoding 从 "gzip, deflate" 改成 "identity" → 直接不压缩，绕开解压环节
-#   2. 所有请求收进 _get()，任何网络/解码异常都不再抛出；万一仍遇到"头说是 gzip
-#      但体不是"，自动改为读原始字节重试
-#   3. 一个接口出错不再拖垮整次运行 → 签到结果一定能打印出来
-#      （上一版就是崩在最后的查询接口，导致前面签到成没成完全看不到）
-#
-# 另外把退出码改对了：签到真的失败时 exit 1（红色），成功或今日已签到 exit 0（绿色）。
-# 这样 Actions 的绿勾才真的代表"签到了"。
-# ============================================================================
 
 
 def get_cookies():
@@ -50,13 +26,15 @@ class BaiduWP:
             "Accept": "application/json, text/plain, */*",
             "X-Requested-With": "XMLHttpRequest",
             "Connection": "keep-alive",
+            # 必须显式声明不要压缩：百度部分接口会返回 Content-Encoding: gzip，
+            # 但响应体并不是 gzip，交给 requests 自动解压会抛 ContentDecodingError。
             "Accept-Encoding": "identity",
             "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
             "Cookie": self.cookie,
         }
 
     def _get(self, url):
-        """安全 GET，返回 (status_code, text)。任何异常都不抛出（返回 0, ""）。"""
+        """安全 GET，返回 (status_code, text)。任何异常都不抛出，失败返回 (0, "")。"""
         try:
             resp = self.session.get(url, headers=self.headers, timeout=20)
             return resp.status_code, resp.text
